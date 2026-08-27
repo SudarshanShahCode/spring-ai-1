@@ -1,9 +1,14 @@
 package com.springai.controllers;
 
+import com.springai.dtos.LanguageAnalysis;
+import com.springai.dtos.ProjectIdea;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
+import org.springframework.ai.converter.BeanOutputConverter;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,8 +17,10 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
+import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/ai")
 public class ChatController {
@@ -24,7 +31,11 @@ public class ChatController {
     private Resource promptResource;
 
     public ChatController(ChatClient.Builder builder) {
-        this.chatClient = builder.build();
+        this.chatClient = builder
+                .defaultSystem("You are a helpful AI assistant. You are expected to answer the questions related to the given domain." +
+                        "Any question that is asked outside of the domain, decline it by responding to user that " +
+                        "'I specialize in the given domain and I can't answer any query outside it'.")
+                .build();
     }
 
 //    Your Controller handler
@@ -87,4 +98,60 @@ public class ChatController {
                 .call()
                 .content();
     }
+
+    @GetMapping("/str-ask")
+    public ActorsFilms strAsk() {
+        ActorsFilms entity = chatClient
+                .prompt()
+                .user("Generate the filmography for a random actor.")
+                .call()
+                .entity(ActorsFilms.class);
+
+        log.info("entity : {}", entity);
+
+        return entity;
+    }
+
+    @GetMapping("/analyze-language")
+    public LanguageAnalysis analyzeLanguage(@RequestParam String language) {
+
+        BeanOutputConverter<LanguageAnalysis> converter = new BeanOutputConverter<>(LanguageAnalysis.class);
+
+        return chatClient
+                .prompt()
+                .user(u -> u.text("""
+                        Analyze the programming language: {language}
+                        
+                        popularity score: between 1-10, 1 is low, 10 is high
+                        learningDifficulty: either of these 3 values: "Easy", "Medium", "Hard"
+                        {format}
+                        """)
+                        .param("language", language)
+                        .param("format", converter.getFormat()))
+                .call()
+                .entity(LanguageAnalysis.class);
+    }
+
+    @GetMapping("/suggest-projects")
+    public List<ProjectIdea> suggestProjects(@RequestParam String techStack) {
+
+        var converter = new BeanOutputConverter<>(
+                new ParameterizedTypeReference<List<ProjectIdea>>() {
+                }
+        );
+
+        return chatClient.prompt()
+                .user(u -> u.text("""
+                        Suggest 3 beginner project ideas for a developer using {techStack}.
+                        
+                        {format}
+                        """)
+                        .param("techStack", techStack)
+                        .param("format", converter.getFormat()))
+                .call()
+                .entity(new ParameterizedTypeReference<>(){});
+    }
+
 }
+
+record ActorsFilms(String actor, List<String> movies) {}
