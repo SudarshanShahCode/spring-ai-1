@@ -1,5 +1,6 @@
 package com.springai.controllers;
 
+import com.springai.dtos.ActorsFilms;
 import com.springai.dtos.LanguageAnalysis;
 import com.springai.dtos.ProjectIdea;
 import lombok.extern.slf4j.Slf4j;
@@ -152,6 +153,13 @@ public class ChatController {
                 .entity(new ParameterizedTypeReference<>(){});
     }
 
-}
+    @GetMapping("/ask4")
+    public String ask(@RequestParam String message) {
+        return chatClient
+                .prompt()
+                .user(message)
+                .call()
+                .content();
+    }
 
-record ActorsFilms(String actor, List<String> movies) {}
+}
