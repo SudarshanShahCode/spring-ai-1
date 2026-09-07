@@ -5,9 +5,12 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SafeGuardAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
+import org.springframework.ai.vectorstore.SearchRequest;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -38,17 +41,46 @@ public class AiConfig {
 //                .build();
 //    }
 
+//    @Bean
+//    public ChatClient chatClient(ChatClient.Builder builder, MyCustomAdvisor myCustomAdvisor) {
+//        return builder
+//                .defaultAdvisors(
+//                        new SafeGuardAdvisor(List.of(
+//                                "security",
+//                                "confidential",
+//                                "password"
+//                        )),
+//                        new SimpleLoggerAdvisor(),
+//                        myCustomAdvisor
+//                )
+//                .build();
+//    }
+
     @Bean
-    public ChatClient chatClient(ChatClient.Builder builder, MyCustomAdvisor myCustomAdvisor) {
+    public ChatClient chatClient(
+            ChatClient.Builder builder,
+            VectorStore vectorStore,
+            ChatMemory chatMemory) {
+
         return builder
+                .defaultSystem("""
+                        You are a helpful customer support assistant for XYZCorp.
+                        Answer questions using ONLY the context provided to you.
+                        If the answer is not in the context, say:
+                        "I don't have information about that in my knowledge base."
+                        Never make up answers.
+                        """)
                 .defaultAdvisors(
-                        new SafeGuardAdvisor(List.of(
-                                "security",
-                                "confidential",
-                                "password"
-                        )),
-                        new SimpleLoggerAdvisor(),
-                        myCustomAdvisor
+                        MessageChatMemoryAdvisor.builder(chatMemory).build(),
+                        // RAG — retrieves relevant chunks and injects into prompt
+                        QuestionAnswerAdvisor.builder(vectorStore)
+                                .searchRequest(
+                                        SearchRequest.builder()
+                                                .topK(5)
+                                                .similarityThreshold(0.20)
+                                                .build()
+                                )
+                                .build()
                 )
                 .build();
     }
